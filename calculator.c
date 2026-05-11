@@ -23,6 +23,7 @@
  *   3. Enter second number (up to 5 digits, 0-65535)
  *   4. Press '#'           (result shown on LCD)
  *   5. Any key resets for a new calculation
+ *   Note: System clock at 12 MHz, frequency 50000 instructions every GUI update
  */
 
 #include <8051.h>
@@ -49,6 +50,7 @@ void sendChar(char c);
 void sendString(const __code char* str);
 __bit getBit(char c, char bitNumber);
 void delay(void);
+void wait_key_release(void);
 void ScanKeyPad(void);
 void IDCode0(void);
 void IDCode1(void);
@@ -202,8 +204,13 @@ __bit isOverflow(unsigned int num1, unsigned int num2) {
 }
 
 void delay(void) {
-    char c;
-    for (c = 0; c < 50; c++);
+    unsigned int c;
+    for (c = 0; c < 500; c++)
+    {
+        __asm
+            nop
+        __endasm;
+    }
 }
 
 /* ═══════════════════════════════════════════
@@ -251,9 +258,24 @@ void clear_display(void)
     delay();
 }
 
-/* ------------------------------------------------------------------------- */
-/* KEYPAD SCAN                                                               */
-/* ------------------------------------------------------------------------- */
+void wait_key_release(void)
+{
+    unsigned char i;
+
+    while (P0_4 == 0 || P0_5 == 0 || P0_6 == 0)
+    {
+        delay();
+    }
+
+    for (i = 0; i < 20; i++)
+    {
+        delay();
+    }
+}
+
+/* ═══════════════════════════════════════════
+   Keypad scan
+═══════════════════════════════════════════ */
 void ScanKeyPad(void)
 {
     while (1)
@@ -290,7 +312,7 @@ void ScanKeyPad(void)
         if (F0)
             break;
     }
-
+    wait_key_release();
     F0 = 0;
 }
 
@@ -408,6 +430,7 @@ void main(void) __naked
                         clear_display();
                         sendString("Overflow!");
                         delay();
+                        state = 2;
                         break;
                     }
                     if (digit_count < 5) {
@@ -416,7 +439,7 @@ void main(void) __naked
                         else {
                             clear_display();
                             sendString("Overflow!");
-                            delay();
+                            state = 2;
                             break;
                         }
                         sendChar(key);
@@ -436,7 +459,7 @@ void main(void) __naked
                     if (isOverflow(num2 * 10, key - '0')) {
                         clear_display();
                         sendString("Overflow!");
-                        delay();
+                        state = 2;
                         break;
                     }
                     if (digit_count < 5) {
@@ -445,7 +468,7 @@ void main(void) __naked
                         else {
                             clear_display();
                             sendString("Overflow!");
-                            delay();
+                            state = 2;
                             break;
                         }
                         sendChar(key);
@@ -473,12 +496,9 @@ void main(void) __naked
                 state = 0;
 
                 clear_display();
-                sendChar(key);
-                sendChar(key);
-                sendChar(key);
 
                 if (key >= '0' && key <= '9') {
-                    num1 = num1 * 10 + (key - '0');
+                    num1 = key - '0';
                     sendChar(key);
                     digit_count++;
                 }
